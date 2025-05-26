@@ -1,0 +1,11 @@
+{
+    "scripts": {
+        "server": "ts-node server.ts"
+    },
+    "dependencies": {
+        "nodemailer": "^7.0.3"
+    },
+    "devDependencies": {
+        "@types/nodemailer": "^6.4.17"
+    }
+}
