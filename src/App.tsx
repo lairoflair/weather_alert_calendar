@@ -90,7 +90,7 @@
 //         padding: '1rem 2rem',
 //         borderRadius: '8px',
 //         display: 'flex',
-        
+
 //         flexDirection: 'row', // Change to row
 //         gap: '1rem',          // Increase gap for spacing
 //         minWidth: '300px',
@@ -183,8 +183,8 @@ function App() {
         if (data.access_token) {
           // Save access token and fetch calendar events next
           localStorage.setItem('access_token', data.access_token);
-          fetchCalendarEvents(data.access_token);
-          fetchUserEmail(data.access_token);
+          // fetchCalendarEvents(data.access_token);
+          // fetchUserEmail(data.access_token);
         } else {
           alert('Failed to get access token');
         }
@@ -192,8 +192,9 @@ function App() {
       .catch(() => alert('Token exchange failed'));
   }, [authCode]);
 
-  const fetchCalendarEvents = (accessToken: string) => {
-    fetch('http://localhost:4000/calendar', {
+  const fetchCalendarEvents = async (accessToken: string) => {
+    console.log('Hello')
+    await fetch('http://localhost:4000/calendar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ access_token: accessToken }),
@@ -201,6 +202,7 @@ function App() {
       .then(res => res.json())
       .then(data => setEvents(data.items || []))
       .catch(() => alert('Failed to fetch calendar events'));
+    await console.log('Events fetched:', events);
   };
 
   const fetchUserEmail = (accessToken: string) => {
@@ -213,14 +215,14 @@ function App() {
       .then(data => {
         if (data.email) {
           setUserEmail(data.email);
-          
+
         }
       })
       .catch(() => alert('Failed to fetch user email'));
   };
 
   const sendEmail = () => {
-      fetch('http://localhost:4000/send-email', {
+    fetch('http://localhost:4000/send-email', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -228,11 +230,11 @@ function App() {
         subject: 'Weather Alert',
       }),
     })
-    .then(res => res.json())
-    .then(data => {
-      if (data.success) alert('Email sent!');
-      else alert('Failed to send email');
-    });
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) alert('Email sent!');
+        else alert('Failed to send email');
+      });
   }
   const logout = () => {
     localStorage.clear();
@@ -258,22 +260,84 @@ function App() {
     );
   }
 
-  return (
-    <div>
-      <h1>Your Google Calendar Events</h1>
+//   return (
+//     <div>
+//       <h1>Your Google Calendar Events</h1>
+//       <button onClick={logout}>Logout</button>
+//       <button onClick={sendEmail}>Send Email</button>
+//       <ul>
+//         {events.map(event => (
+//           <li key={event.id}>
+//             {event.summary} (
+//             {event.start?.dateTime || event.start?.date} - {event.end?.dateTime || event.end?.date})
+//             {event.location && <span> at {event.location}</span>}
+//             {event.weather && (
+//               <>
+//                 <span>
+//                   {event.weather.description && <>{event.weather.description}</>}
+//                   {event.weather.temperature !== null && event.weather.temperature !== undefined && (
+//                     <> {event.weather.temperature}°C</>
+//                   )}
+//                   {event.weather.pop !== null && event.weather.pop !== undefined && (
+//                     <> , POP: {event.weather.pop}%</>
+//                   )}
+//                 </span>
+//                 {event.weather.timeLeft && (
+//                   <span>
+//                     {' - Time Left: '}
+//                     {event.weather.timeLeft.days}d {event.weather.timeLeft.hours}h {event.weather.timeLeft.minutes}m {event.weather.timeLeft.seconds}s
+//                   </span>
+//                 )}
+//               </>
+//             )}
+//           </li>
+//         ))}
+//       </ul>
+//     </div>
+//   );
+
+return (
+  <div className="app-container">
+    <h1>Your Google Calendar Events</h1>
+    <div className="button-row">
       <button onClick={logout}>Logout</button>
       <button onClick={sendEmail}>Send Email</button>
-      <ul>
-        {events.map(event => (
-          <li key={event.id}>
-            {event.summary} (
-            {event.start?.dateTime || event.start?.date} - {event.end?.dateTime || event.end?.date})
-            {event.location && <span> at {event.location}</span>}
-          </li>
-        ))}
-      </ul>
     </div>
-  );
+    <ul className="event-list">
+      {events.map(event => (
+        <li className="event-card" key={event.id}>
+          <div className="event-title">
+            {event.summary}
+          </div>
+          <div className="event-meta">
+            {event.start?.dateTime || event.start?.date}
+            {" - "}
+            {event.end?.dateTime || event.end?.date}
+            {event.location && <span> &middot; <b>{event.location}</b></span>}
+          </div>
+          {event.weather && (
+            <div className="weather-info">
+              {event.weather.description && <span>{event.weather.description}</span>}
+              {event.weather.temperature !== null && event.weather.temperature !== undefined && (
+                <span> &nbsp;|&nbsp; {event.weather.temperature}°C</span>
+              )}
+              {event.weather.pop !== null && event.weather.pop !== undefined && (
+                <span> &nbsp;|&nbsp; POP: {event.weather.pop}%</span>
+              )}
+              {event.weather.timeLeft && (
+                <span>
+                  &nbsp;|&nbsp; Time Left: {event.weather.timeLeft.days}d {event.weather.timeLeft.hours}h {event.weather.timeLeft.minutes}m {event.weather.timeLeft.seconds}s
+                </span>
+              )}
+              {event.weather.error && (
+                <span style={{ color: "#e53e3e" }}> &nbsp;|&nbsp; {event.weather.error}</span>
+              )}
+            </div>
+          )}
+        </li>
+      ))}
+    </ul>
+  </div>
+);
 }
-
 export default App;
