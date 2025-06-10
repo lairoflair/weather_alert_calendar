@@ -1,64 +1,53 @@
-// import express from 'express'
-// import cors from 'cors'
-// import dotenv from 'dotenv'
-// import { google } from 'googleapis'
-// import { OAuth2Client } from 'google-auth-library'
-// dotenv.config()
-
-// const app = express()
-// const PORT = process.env.PORT || 5000
-
-// const oauth2Client = new OAuth2Client(
-//   process.env.GOOGLE_CLIENT_ID,
-//   process.env.GOOGLE_CLIENT_SECRET,
-//   process.env.GOOGLE_REDIRECT_URI
-// )
-
-// app.use(cors())
-// app.use(express.json())
-
-// // Example route
-// app.get('/', (req, res) => {
-//   res.send('Weather Calendar backend is running!')
-// })
-// // app.get('/api/calendar', (req, res) => {})
-// // Add your API routes here (e.g., for Google OAuth, weather, email notifications)
-// app.post('/api/calendar', async (req, res) => {
-//   const { accessToken } = req.body
-//   const calendar = google.calendar({ version: 'v3', auth: oauth2Client })
-
-//   try {
-//     const response = await calendar.events.list({
-//       calendarId: 'primary',
-//       timeMin: new Date().toISOString(),
-//       maxResults: 10,
-//       singleEvents: true,
-//       orderBy: 'startTime',
-//     })
-//     res.json(response.data.items)
-//   } catch (error) {
-//     console.error('Error fetching events:', error)
-//     res.status(500).send('Error fetching events')
-//   }
-// })
-
-// app.listen(PORT, () => {
-//   console.log(`Server is running on port ${PORT}`)
-// })
-
-import express from 'express';
+import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import axios from 'axios';
 import nodemailer from 'nodemailer';
+import { Db } from 'mongodb';
+import jwt from 'jsonwebtoken';
+import { client, connectDB } from './db'
+import cookieParser from 'cookie-parser';
+import cron from 'node-cron';
+import { ref } from 'process';
+
 const { getWeatherForCity } = require('./weather');
 const { getGeocodeFromAddress } = require('./Geocode');
+
+
 dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-app.use(cors());
+
+app.use(cookieParser());
+app.use(cors({
+  origin: 'http://localhost:5173',
+  credentials: true,
+}));
 app.use(express.json());
+
+let db: Db;
+
+type CalendarEvent = {
+  summary?: string; // e.g., "Meeting with Bob"
+  location?: string;
+  weather?: {
+    timeLeft?: {
+      days: number;
+      hours: number;
+      minutes: number;
+      seconds: number;
+    },
+    temperature?: number; // e.g., 22.5
+    description?: string; // e.g., "Clear sky"
+    pop?: number; // Probability of precipitation (0-100)
+    error?: string; // Error message if any
+  }; // Weather data will be added later
+  start?: {
+    dateTime?: string; // e.g., "2022-08-30T15:00:00Z"
+    date?: string;     // e.g., "2022-08-30"
+  };
+}
 
 function roundUpToNearest3Hours(date: Date): Date {
   const roundedDate = new Date(date);
@@ -81,10 +70,177 @@ function formatDateToYYYYMMDDHHMMSS(date: Date): string {
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
 
+const tokenExpired = async (expiresIn: number) => {
+  const currentTime = Date.now();
+  const expirationTime = new Date(expiresIn).getTime();
+  console.log('Current time:', new Date(currentTime).toLocaleString());
+  console.log('Expiration time:', new Date(expirationTime).toLocaleString());
+  return currentTime >= expirationTime;
+}
+
+const accces_token_refresh = async (email: string) => {
+  const user = await db.collection('users').findOne({ email });
+  if (!user) {
+    console.log('User not found');
+    return;
+  }
+  const refreshToken = user.refresh_token;
+  const response = await axios.post('https://oauth2.googleapis.com/token', {
+    client_id: process.env.GOOGLE_CLIENT_ID,
+    client_secret: process.env.GOOGLE_CLIENT_SECRET,
+    refresh_token: refreshToken,
+    grant_type: 'refresh_token',
+  });
+
+  type TokenResponse = {
+    access_token: string;
+    expires_in: number; // seconds
+    scope?: string;
+    token_type?: string;
+    id_token: string;
+    refresh_token_expires_in: number; // seconds
+  }
+  if (!response.data) {
+    console.error('Failed to refresh access token:', response.data);
+    return;
+  }
+
+  const { access_token, expires_in, refresh_token_expires_in } = response.data as TokenResponse;
+  let accessTokenExpireDate = Date.now() + expires_in * 1000; // Convert seconds to milliseconds
+  let refreshTokenExpireDate = Date.now() + refresh_token_expires_in * 1000;
+  await db.collection('users').updateOne(
+    { email }, // Use optional chaining to avoid errors if decoded is null
+    {
+      $set: {
+        access_token: access_token,
+        expires_in: accessTokenExpireDate,
+        refresh_expires_in: refreshTokenExpireDate,
+        updatedAt: new Date(),
+      },
+    },
+    { upsert: true }
+  );
+
+  console.log('Response from token refresh:', response.data);
+}
+
+const accessTokenCheck = async (token: string, email: string) => {
+  if (!token) {
+    console.log('No access token provided');
+    return false;
+  }
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET as string);
+    console.log('Decoded token:', decoded);
+    return true;
+  } catch (error) {
+    console.error('Token verification failed:', error);
+    return false;
+  }
+}
+
+const fetchWeatherForEvents = async (events: CalendarEvent[]) => {
+  for (const event of events) {
+    let dateTime = event.start?.dateTime || event.start?.date
+    if (event.location && dateTime) {
+      try {
+        let geocodeData = await getGeocodeFromAddress(event.location);
+        let geoInfo = {
+          lat: geocodeData.lat,
+          lng: geocodeData.lng,
+          time: formatDateToYYYYMMDDHHMMSS(roundUpToNearest3Hours(new Date(dateTime))),
+        };
+        const weatherData = await getWeatherForCity(geoInfo);
+        event.weather = weatherData;
+      } catch (err) {
+        console.error(`Failed to fetch weather for ${event.location}:`, err);
+        event.weather = { error: 'Weather data not available' };
+      }
+    } else {
+      event.weather = { error: 'No location provided' };
+    }
+  }
+  console.log('Done looping through events');
+  return events;
+}
+
+
+
+app.get('/api/getPreferences', async (req, res) => {
+  const email = req.query.email as string;
+  const token = req.cookies['access_token'];
+  console.log('email from query:', email);
+  if (!token) {
+    console.log('No access token found in cookies');
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  console.log('Fetching preferences for email:', email);
+  if (!email) {
+    res.status(400).json({ error: 'Email is required' });
+    return;
+  }
+  try {
+    const user = await db.collection('users').findOne({ email });
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return
+    }
+    res.json(user.preferences || {});
+  } catch (error) {
+    console.error('Error fetching preferences:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
+app.post('/api/savePreferences', async (req, res) => {
+  console.log("TYUIOSAhoiasduoid");
+  const { preferences, email } = req.body;
+  console.log('Saving preferences for email:', email, 'with preferences:', preferences);
+  if (!email || !preferences) {
+    console.log('Email or preferences are missing');
+    res.status(400).json({ error: 'Email and preferences are required' });
+    return;
+  }
+  try {
+    const user = await db.collection('users').findOne({ email });
+    if (!user) {
+      console.log('User not found');
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    await db.collection('users').updateOne(
+      { email }, // Use optional chaining to avoid errors if decoded is nul
+      {
+        $set: {
+          preferences: preferences,
+          updatedAt: new Date(),
+        },
+      },
+      { upsert: true }
+    );
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error saving preferences:', error);
+  }
+})
+
+app.get('/api/check-auth', (req, res) => {
+  const token = req.cookies['access_token'];
+  console.log('1Access token from cookie:', token);
+  if (token) {
+    res.status(200).json({ authenticated: true });
+    console.log('User is authenticated');
+  } else {
+    res.status(401).json({ authenticated: false });
+    console.log('User is not authenticated');
+  }
+});
+
 app.post('/auth/token', async (req, res) => {
   const { code } = req.body;
-  // console.log('clientID', process.env.GOOGLE_CLIENT_ID);
-  // console.log('redirectURI', process.env.GOOGLE_REDIRECT_URI);
   try {
     const response = await axios.post('https://oauth2.googleapis.com/token', {
       code,
@@ -94,16 +250,57 @@ app.post('/auth/token', async (req, res) => {
       grant_type: 'authorization_code',
       code_verifier: req.body.code_verifier,
     });
+    // console.log('Token exchange successful:', response.data);
 
-    res.json(response.data);
+    type TokenResponse = {
+      access_token: string;
+      refresh_token: string;
+      expires_in: number;
+      scope: string;
+      token_type?: string;
+      id_token: string;
+      refresh_token_expires_in: number;
+    };
+    const { access_token, expires_in, refresh_token, refresh_token_expires_in, id_token } = response.data as TokenResponse;
+    let accessTokenExpireDate = Date.now() + expires_in * 1000; // Convert seconds to milliseconds
+    let refreshTokenExpireDate = Date.now() + refresh_token_expires_in * 1000; // Convert seconds to milliseconds
+  
+    const decoded = jwt.decode(id_token);
+    const { email } = decoded as { email: string };
+    await db.collection('users').updateOne(
+      { email }, // Use optional chaining to avoid errors if decoded is nul
+      {
+        $set: {
+          access_token: access_token,
+          expires_in: accessTokenExpireDate,
+          refresh_token: refresh_token,
+          refresh_expires_in: refreshTokenExpireDate,
+          id_token: id_token,
+          updatedAt: new Date(),
+        },
+      },
+      { upsert: true }
+    );
+
+    res.cookie('access_token', access_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 3600 * 1000 // 1 hour
+    });
+    res.json(access_token);
   } catch (error) {
     console.error('Token exchange failed', error);
     res.status(500).json({ error: 'Token exchange failed' });
   }
 });
 
-app.post('/calendar', async (req, res) => {
-  const { access_token } = req.body;
+app.post('/api/calendar', async (req, res) => {
+  const access_token = req.cookies.access_token;
+  if (!access_token) {
+    res.status(401).json({ error: 'Not authenticated' });
+    return;
+  }
   const now = new Date().toISOString();
   const nextMonth = new Date();
   nextMonth.setMonth(nextMonth.getMonth() + 1);
@@ -118,76 +315,8 @@ app.post('/calendar', async (req, res) => {
         },
       }
     );
-    // console.log('Calendar events:', response.data);
-
-    type CalendarEvent = {
-      location?: string;
-      weather?: {
-        timeLeft?: {
-          days: number;
-          hours: number;
-          minutes: number;
-          seconds: number;
-        },
-        temperature?: number; // e.g., 22.5
-        description?: string; // e.g., "Clear sky"
-        pop?: number; // Probability of precipitation (0-100)
-        error?: string; // Error message if any
-      }; // Weather data will be added later
-      start?: {
-        dateTime?: string; // e.g., "2022-08-30T15:00:00Z"
-        date?: string;     // e.g., "2022-08-30"
-      };
-      
-    };
-    const data = response.data as { items: CalendarEvent[] };
-    
-    // let dateTime = data.items[2].start?.dateTime || data.items[2].start?.date;
-    // // const targetDateTime = new Date(dateTime).toISOString().replace('T', ' ').substring(0, 19);
-    // if (!dateTime) {
-    //   console.error('No dateTime found in the first event');
-    // }
-    // else {
-    //   const date = new Date(dateTime);
-    //   const roundedDate = roundUpToNearest3Hours(date);
-    //   const formattedDate = formatDateToYYYYMMDDHHMMSS(roundedDate);
-    //   console.log('formattedDate:', formattedDate); //"2025-05-27 03:00:00"
-    // }
-
-    // const example = { lat: 43.7760345, lng: -79.2575755, dateTime:  }
-    // const weatherData = await getWeatherForCity(example);
-    // console.log('Weather data:', weatherData);
-    for (const event of data.items) {
-      // console.log('Processing event:', event);
-      // console.log('Location:', event.location);
-      let dateTime = event.start?.dateTime || event.start?.date
-      if (event.location && dateTime) {
-        console.log('Event location:', event.location);
-        try {
-          // let dateTime = event.start?.date
-          // console.log('Event dateTime:', dateTime);
-          
-          
-          let geocodeData = await getGeocodeFromAddress(event.location);
-          // console.log('Geocode data:', geocodeData);
-          let geoInfo = {
-            lat: geocodeData.lat,
-            lng: geocodeData.lng,
-            time: formatDateToYYYYMMDDHHMMSS(roundUpToNearest3Hours(new Date(dateTime))),
-          };
-          // console.log('Geo info:', geoInfo);
-          const weatherData = await getWeatherForCity(geoInfo);
-          event.weather = weatherData;
-          // console.log('Weather data:', weatherData);
-          // console.log('Event Weather data:', event.weather);
-        } catch (err) {
-          console.error(`Failed to fetch weather for ${event.location}:`, err);
-          event.weather = { error: 'Weather data not available' };
-        }
-      } else {
-        event.weather = { error: 'No location provided' };
-      }
-    }
+    let data = response.data as { items: CalendarEvent[] };
+    data.items = await fetchWeatherForEvents(data.items)
     console.log('Done looping through events');
     res.json(data);
 
@@ -198,7 +327,7 @@ app.post('/calendar', async (req, res) => {
 });
 
 app.post('/userEmail', async (req, res) => {
-  const { access_token } = req.body;
+  const access_token = req.cookies.access_token;
   try {
     const response = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
       headers: {
@@ -238,10 +367,104 @@ app.post('/send-email', async (req, res) => {
   }
 });
 
+cron.schedule('0 6 * * *', async () => {
+  console.log(`📧 Running scheduled task at ${new Date().toLocaleTimeString()}`);
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASSWORD,
+    },
+  });
+
+  const users = await db.collection('users').find({}).toArray();
+  for (const user of users) {
+    const { email } = user;
+    const { weatherAlerts } = user.preferences || {};
+    let access_token = user.access_token;
+
+    if (!email || !access_token) {
+      console.log(`❌ Skipping user with missing email or access token: ${user._id}`);
+      continue;
+    }
+
+    if (!weatherAlerts || weatherAlerts === false) {
+      console.log(`❌ Skipping user ${user._id} with preference: weatherAlerts is false`);
+      continue;
+    }
+    if (await tokenExpired(user.refresh_expires_in)) {
+      console.log(`❌ Skipping user ${user._id} with expired refresh token`);
+      continue;
+    }
+    if (await tokenExpired(user.expires_in)) {
+      console.log(`user ${user._id} with expired access token`);
+      access_token = await accces_token_refresh(email);
+    }
+
+    const now = new Date().toISOString();
+    const nextMonth = new Date();
+    nextMonth.setMonth(nextMonth.getMonth() + 1);
+    const nextMonthISO = nextMonth.toISOString();
+    try {
+      const response = await axios.get(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&orderBy=startTime&timeMin=${now}&timeMax=${nextMonthISO}`,
+        {
+          headers: {
+            Authorization: `Bearer ${access_token}`,
+          },
+        }
+      );
+      let data = response.data as { items: CalendarEvent[] };
+      data.items = await fetchWeatherForEvents(data.items)
+
+      await transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: email,
+        subject: 'Weather Calendar - Test Email',
+        text: `This is your weather alert email sent every minute (for testing).
+        ${data.items.length} events found in your calendar.
+
+        ${data.items.map(event =>
+          
+          `Event: ${event.summary || 'No Title'}
+          Date: ${event.start?.dateTime
+            ? new Date(event.start.dateTime).toLocaleString()
+            : event.start?.date
+              ? new Date(event.start.date).toLocaleDateString()
+              : 'No Date'
+          }
+          Location: ${event.location || 'No Location'}
+          Weather: ${event.weather?.description || 'No Weather Data'}
+          Temperature: ${event.weather?.temperature || 'No Temperature Data'}
+          Probability of Precipitation: ${event.weather?.pop || 'No Data'}
+          Time Left: ${event.weather?.timeLeft ? `${event.weather.timeLeft.days} days, ${event.weather.timeLeft.hours} hours, ${event.weather.timeLeft.minutes} minutes, ${event.weather.timeLeft.seconds} seconds` : 'No Time Left Data'}`
+        ).join('\n\n')}`
+      });
+
+      console.log(`✅ Email sent to ${email}`);
+    } catch (error) {
+      console.error(`❌ Failed to send email to ${email}:`, error);
+    }
+  }
+});
+
+
 app.get('/', (req, res) => {
   res.send('Weather Calendar backend is running!');
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+const startServer = async () => {
+  db = await connectDB(); // wait until DB is connected
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running at http://localhost:${PORT}`);
+  });
+};
+
+startServer();
+
+
+
+process.on("SIGINT", async () => {
+  await client.close();
+  process.exit(0);
 });

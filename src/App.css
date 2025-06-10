@@ -1,81 +1,121 @@
-/* App.css */
-body {
-  background: #f5f7fa;
-  font-family: 'Segoe UI', Arial, sans-serif;
+html, body, #root {
+  height: 100%;
   margin: 0;
   padding: 0;
+  width: 100%;
 }
 
-.app-container {
-  max-width: 700px;
-  margin: 40px auto;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.08);
-  padding: 2rem 2.5rem 2.5rem 2.5rem;
-}
-
-h1 {
-  text-align: center;
-  color: #2d3748;
-  margin-bottom: 2rem;
-}
-
-.button-row {
+.login-container {
+  height: 100vh;
   display: flex;
-  gap: 1rem;
-  justify-content: flex-end;
-  margin-bottom: 2rem;
+  justify-content: center;
+  align-items: center;
 }
 
-button {
-  background: #3182ce;
-  color: #fff;
-  border: none;
-  padding: 0.6rem 1.2rem;
-  border-radius: 6px;
-  font-size: 1rem;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-button:hover {
-  background: #225ea8;
-}
-
-ul.event-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-li.event-card {
-  background: #f7fafc;
+.google-login {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 12px 20px;
+  background: white;
+  border: 1px solid #ccc;
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(49,130,206,0.06);
-  margin-bottom: 1.5rem;
-  padding: 1.2rem 1.5rem;
+  cursor: pointer;
+  font-size: 16px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+
+.google-login img {
+  height: 20px;
+}
+
+.app-wrapper {
+  width: 100%;
+  padding: 1rem 2rem;
+  box-sizing: border-box;
+}
+
+
+.app-header {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 2rem;
+  position: relative;
 }
 
-.event-title {
-  font-weight: 600;
-  color: #2b6cb0;
-  font-size: 1.1rem;
+.top-controls {
+  position: absolute;
+  top: 1rem;
+  right: 2rem;
+  display: flex;
+  gap: 1rem;
+  align-items: center;
 }
 
-.event-meta {
-  color: #4a5568;
-  font-size: 0.97rem;
+.logout-button {
+  background: #e53e3e;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.settings-dropdown {
+  position: relative;
+}
+
+.settings-dropdown button {
+  background: #4a5568;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+}
+
+.dropdown-content {
+  position: absolute;
+  top: 36px;
+  right: 0;
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  padding: 10px;
+  z-index: 999;
+}
+
+.events-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.event-card {
+  background: white;
+  padding: 1rem;
+  border-left: 5px solid #3182ce;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.event-card h2 {
+  margin-top: 0;
 }
 
 .weather-info {
   margin-top: 0.5rem;
-  background: #ebf8ff;
-  border-radius: 6px;
-  padding: 0.5rem 1rem;
-  color: #2c5282;
-  font-size: 0.97rem;
-  display: inline-block;
+  color: #2d3748;
+  font-size: 1rem;
+  text-align: right;
+  min-width: 180px;
+}
+
+.weather-error {
+  color: red;
 }
