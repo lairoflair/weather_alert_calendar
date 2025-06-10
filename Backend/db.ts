@@ -1,8 +1,10 @@
 // This file is responsible for connecting to the MongoDB database.
 // It exports a function to connect to the database and the client instance.
+import dotenv from 'dotenv';
 import { Db } from 'mongodb';
 const { MongoClient, ServerApiVersion } = require('mongodb');
-const uri = 'mongodb+srv://lair:Jcx2X6ZmfyS44SFi@cluster0.la7911h.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
+dotenv.config();
+const uri = process.env.MONGODB_URI as string;
 let db: Db;
 const client = new MongoClient(uri, {
   serverApi: {
