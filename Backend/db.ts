@@ -3,8 +3,11 @@
 import dotenv from 'dotenv';
 import { Db } from 'mongodb';
 const { MongoClient, ServerApiVersion } = require('mongodb');
+<<<<<<< HEAD
 dotenv.config();
 const uri = process.env.MONGODB_URI as string;
+=======
+>>>>>>> 4f7032c17b07df1c7b8d1f051506b78bb35ad7ba
 let db: Db;
 const client = new MongoClient(uri, {
   serverApi: {

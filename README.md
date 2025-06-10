@@ -8,7 +8,7 @@ Users sign in with their Gmail account, the app reads Google Calendar events, an
 - Google Sign-In (OAuth 2.0)
 - Reads your Google Calendar events
 - Checks weather forecasts for event days
-- Sends email notifications if rain or snow is likely
+- Sends email notifications
 
 ## Getting Started
 
