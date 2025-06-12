@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import pkceChallenge from 'pkce-challenge';
 import './App.css'; // Add custom styles here
 
@@ -121,15 +121,15 @@ function App() {
       .catch(() => alert('Failed to save preferences'));
   };
 
-  const sendEmail = () => {
-    fetch(`${API_BASE_URL}/send-email`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to: userEmail, subject: 'Weather Alert' }),
-    })
-      .then(res => res.json())
-      .then(data => alert(data.success ? 'Email sent!' : 'Failed to send email'));
-  };
+  // const sendEmail = () => {
+  //   fetch(`${API_BASE_URL}/send-email`, {
+  //     method: 'POST',
+  //     headers: { 'Content-Type': 'application/json' },
+  //     body: JSON.stringify({ to: userEmail, subject: 'Weather Alert' }),
+  //   })
+  //     .then(res => res.json())
+  //     .then(data => alert(data.success ? 'Email sent!' : 'Failed to send email'));
+  // };
 
   const logout = () => {
     localStorage.clear();
