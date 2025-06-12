@@ -166,7 +166,7 @@ const fetchWeatherForEvents = async (events: CalendarEvent[]) => {
 
 
 
-app.get('/api/getPreferences', async (req, res) => {
+app.get('/api/getPreferences', async (req: Request, res: Response) => {
   const email = req.query.email as string;
   const token = req.cookies['access_token'];
   console.log('email from query:', email);
@@ -195,7 +195,7 @@ app.get('/api/getPreferences', async (req, res) => {
 });
 
 
-app.post('/api/savePreferences', async (req, res) => {
+app.post('/api/savePreferences', async (req: Request, res: Response) => {
   console.log("TYUIOSAhoiasduoid");
   const { preferences, email } = req.body;
   console.log('Saving preferences for email:', email, 'with preferences:', preferences);
@@ -227,7 +227,7 @@ app.post('/api/savePreferences', async (req, res) => {
   }
 })
 
-app.get('/api/check-auth', (req, res) => {
+app.get('/api/check-auth', (req: Request, res: Response) => {
   const token = req.cookies['access_token'];
   console.log('1Access token from cookie:', token);
   if (token) {
@@ -239,7 +239,7 @@ app.get('/api/check-auth', (req, res) => {
   }
 });
 
-app.post('/auth/token', async (req, res) => {
+app.post('/auth/token', async (req: Request, res: Response) => {
   const { code } = req.body;
   try {
     const response = await axios.post('https://oauth2.googleapis.com/token', {
@@ -295,7 +295,7 @@ app.post('/auth/token', async (req, res) => {
   }
 });
 
-app.post('/api/calendar', async (req, res) => {
+app.post('/api/calendar', async (req: Request, res: Response) => {
   const access_token = req.cookies.access_token;
   if (!access_token) {
     res.status(401).json({ error: 'Not authenticated' });
@@ -326,7 +326,7 @@ app.post('/api/calendar', async (req, res) => {
   }
 });
 
-app.post('/userEmail', async (req, res) => {
+app.post('/userEmail', async (req: Request, res: Response) => {
   const access_token = req.cookies.access_token;
   try {
     const response = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
@@ -342,7 +342,7 @@ app.post('/userEmail', async (req, res) => {
   }
 });
 
-app.post('/send-email', async (req, res) => {
+app.post('/send-email', async (req: Request, res: Response) => {
   const { to, subject } = req.body;
   const text = 'This is a test email from your Weather Calendar app!';
   // Configure your email transport (example uses Gmail)
@@ -449,7 +449,7 @@ cron.schedule('0 6 * * *', async () => {
 });
 
 
-app.get('/', (req, res) => {
+app.get('/', (req: Request, res: Response) => {
   res.send('Weather Calendar backend is running!');
 });
 
