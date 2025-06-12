@@ -5,7 +5,7 @@ import './App.css'; // Add custom styles here
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 const REDIRECT_URI = import.meta.env.VITE_REDIRECT_URI || 'http://localhost:5173/auth/callback';
 const SCOPE = 'https://www.googleapis.com/auth/calendar.readonly email profile';
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:4000';
+const API_BASE_URL = import.meta.env.REACT_APP_API_URL || 'http://localhost:4000';
 
 
 function App() {
