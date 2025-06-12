@@ -10,7 +10,7 @@ import cookieParser from 'cookie-parser';
 import cron from 'node-cron';
 import { ref } from 'process';
 
-const { getWeatherForCity } = require('./weather.js');
+const { getWeatherForCity } = require('./Weather');
 const { getGeocodeFromAddress } = require('./Geocode');
 
 
