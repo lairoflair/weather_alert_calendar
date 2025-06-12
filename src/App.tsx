@@ -5,6 +5,8 @@ import './App.css'; // Add custom styles here
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 const REDIRECT_URI = 'http://localhost:5173/auth/callback';
 const SCOPE = 'https://www.googleapis.com/auth/calendar.readonly email profile';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:4000';
+
 
 function App() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
@@ -43,7 +45,7 @@ function App() {
     if (!authCode) return;
     const codeVerifier = localStorage.getItem('pkce_code_verifier');
     if (!codeVerifier) return alert('PKCE code verifier not found.');
-    fetch('http://localhost:4000/auth/token', {
+    fetch(`${API_BASE_URL}/auth/token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code: authCode, code_verifier: codeVerifier }),
@@ -58,7 +60,7 @@ function App() {
   }, [authCode]);
 
   useEffect(() => {
-    fetch('http://localhost:4000/api/check-auth', { credentials: 'include' })
+    fetch(`${API_BASE_URL}/api/check-auth`, { credentials: 'include' })
       .then(res => res.ok ? res.json() : Promise.reject())
       .then(data => setAuthenticated(data.authenticated))
       .catch(() => setAuthenticated(false));
@@ -76,7 +78,7 @@ function App() {
   }, [userEmail]);
 
   const fetchCalendarEvents = async () => {
-    await fetch('http://localhost:4000/api/calendar', {
+    await fetch(`${API_BASE_URL}/api/calendar`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -87,7 +89,7 @@ function App() {
   };
 
   const fetchUserEmail = async () => {
-    await fetch('http://localhost:4000/userEmail', {
+    await fetch(`${API_BASE_URL}/userEmail`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -98,7 +100,7 @@ function App() {
   };
 
   const fetchPreferences = async () => {
-    await fetch(`http://localhost:4000/api/getPreferences?email=${userEmail}`, {
+    await fetch(`${API_BASE_URL}/api/getPreferences?email=${userEmail}`, {
       method: 'GET',
       credentials: 'include',
     })
@@ -108,7 +110,7 @@ function App() {
   };
 
   const savePreferences = async (weatherAlerts: boolean) => {
-    await fetch('http://localhost:4000/api/savePreferences', {
+    await fetch(`${API_BASE_URL}/api/savePreferences`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -120,7 +122,7 @@ function App() {
   };
 
   const sendEmail = () => {
-    fetch('http://localhost:4000/send-email', {
+    fetch(`${API_BASE_URL}/send-email`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ to: userEmail, subject: 'Weather Alert' }),
