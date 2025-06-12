@@ -78,7 +78,7 @@ const tokenExpired = async (expiresIn: number) => {
   return currentTime >= expirationTime;
 }
 
-const accces_token_refresh = async (email: string) => {
+const access_token_refresh = async (email: string) => {
   const user = await db.collection('users').findOne({ email });
   if (!user) {
     console.log('User not found');
@@ -285,9 +285,11 @@ app.post('/auth/token', async (req: Request, res: Response) => {
     res.cookie('access_token', access_token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      sameSite: 'none',
       maxAge: 3600 * 1000 // 1 hour
     });
+    console.log('Access token set in cookie');
+    console.log('Token exchange successful:', response.data);
     res.json(access_token);
   } catch (error) {
     console.error('Token exchange failed', error);
@@ -398,7 +400,7 @@ cron.schedule('0 6 * * *', async () => {
     }
     if (await tokenExpired(user.expires_in)) {
       console.log(`user ${user._id} with expired access token`);
-      access_token = await accces_token_refresh(email);
+      access_token = await access_token_refresh(email);
     }
 
     const now = new Date().toISOString();
