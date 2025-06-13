@@ -8,7 +8,6 @@ import jwt from 'jsonwebtoken';
 import { client, connectDB } from './db'
 import cookieParser from 'cookie-parser';
 import cron from 'node-cron';
-import { ref } from 'process';
 
 const { getWeatherForCity } = require('./Weather');
 const { getGeocodeFromAddress } = require('./Geocode');
@@ -124,20 +123,20 @@ const access_token_refresh = async (email: string) => {
   console.log('Response from token refresh:', response.data);
 }
 
-const accessTokenCheck = async (token: string, email: string) => {
-  if (!token) {
-    console.log('No access token provided');
-    return false;
-  }
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET as string);
-    console.log('Decoded token:', decoded);
-    return true;
-  } catch (error) {
-    console.error('Token verification failed:', error);
-    return false;
-  }
-}
+// const accessTokenCheck = async (token: string, email: string) => {
+//   if (!token) {
+//     console.log('No access token provided');
+//     return false;
+//   }
+//   try {
+//     const decoded = jwt.verify(token, process.env.JWT_SECRET as string);
+//     console.log('Decoded token:', decoded);
+//     return true;
+//   } catch (error) {
+//     console.error('Token verification failed:', error);
+//     return false;
+//   }
+// }
 
 const fetchWeatherForEvents = async (events: CalendarEvent[]) => {
   for (const event of events) {
@@ -451,7 +450,7 @@ cron.schedule('0 6 * * *', async () => {
 });
 
 
-app.get('/', (req: Request, res: Response) => {
+app.get('/', (res: Response) => {
   res.send('Weather Calendar backend is running!');
 });
 
