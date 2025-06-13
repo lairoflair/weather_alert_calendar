@@ -163,6 +163,59 @@ const fetchWeatherForEvents = async (events: CalendarEvent[]) => {
   return events;
 }
 
+const sendEmail = async (email: string, access_token: string) => {
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASSWORD,
+    },
+  });
+
+  const now = new Date().toISOString();
+  const nextMonth = new Date();
+  nextMonth.setMonth(nextMonth.getMonth() + 1);
+  const nextMonthISO = nextMonth.toISOString();
+  try {
+    const response = await axios.get(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&orderBy=startTime&timeMin=${now}&timeMax=${nextMonthISO}`,
+      {
+        headers: {
+          Authorization: `Bearer ${access_token}`,
+        },
+      }
+    );
+    let data = response.data as { items: CalendarEvent[] };
+    data.items = await fetchWeatherForEvents(data.items);
+
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: 'Weather Calendar',
+      text: `${data.items.length} events found in your calendar.
+
+        ${data.items.map(event =>
+
+        `Event: ${event.summary || 'No Title'}
+          Date: ${event.start?.dateTime
+          ? new Date(event.start.dateTime).toLocaleString()
+          : event.start?.date
+            ? new Date(event.start.date).toLocaleDateString()
+            : 'No Date'
+        }
+          Location: ${event.location || 'No Location'}
+          Weather: ${event.weather?.description || 'No Weather Data'}
+          Temperature: ${event.weather?.temperature || 'No Temperature Data'}
+          Probability of Precipitation: ${event.weather?.pop || 'No Data'}
+          Time Left: ${event.weather?.timeLeft ? `${event.weather.timeLeft.days} days, ${event.weather.timeLeft.hours} hours, ${event.weather.timeLeft.minutes} minutes, ${event.weather.timeLeft.seconds} seconds` : 'No Time Left Data'}`
+      ).join('\n\n')}`
+    });
+  }
+
+  catch (error) {
+    console.error(`❌ Failed to send email to ${email}:`, error);
+  }
+}
 
 
 app.get('/api/getPreferences', async (req: Request, res: Response) => {
@@ -263,7 +316,7 @@ app.post('/auth/token', async (req: Request, res: Response) => {
     const { access_token, expires_in, refresh_token, refresh_token_expires_in, id_token } = response.data as TokenResponse;
     let accessTokenExpireDate = Date.now() + expires_in * 1000; // Convert seconds to milliseconds
     let refreshTokenExpireDate = Date.now() + refresh_token_expires_in * 1000; // Convert seconds to milliseconds
-  
+
     const decoded = jwt.decode(id_token);
     const { email } = decoded as { email: string };
     await db.collection('users').updateOne(
@@ -283,10 +336,11 @@ app.post('/auth/token', async (req: Request, res: Response) => {
 
     res.cookie('access_token', access_token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'none',
-      maxAge: 3600 * 1000 // 1 hour
+      secure: process.env.NODE_ENV === 'production', // true only in prod
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // 'lax' or 'strict' in dev
+      maxAge: 3600 * 1000, // 1 hour
     });
+
     console.log('Access token set in cookie');
     console.log('Token exchange successful:', response.data);
     res.json(access_token);
@@ -298,6 +352,7 @@ app.post('/auth/token', async (req: Request, res: Response) => {
 
 app.post('/api/calendar', async (req: Request, res: Response) => {
   const access_token = req.cookies.access_token;
+  console.log('Access token from cookie (calendar):', access_token);
   if (!access_token) {
     res.status(401).json({ error: 'Not authenticated' });
     return;
@@ -329,6 +384,11 @@ app.post('/api/calendar', async (req: Request, res: Response) => {
 
 app.post('/userEmail', async (req: Request, res: Response) => {
   const access_token = req.cookies.access_token;
+  console.log('Access token from cookie (userEmail):', access_token);
+  if (!access_token) {
+    res.status(401).json({ error: 'Missing Access Token' });
+    return;
+  }
   try {
     const response = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
       headers: {
@@ -344,29 +404,39 @@ app.post('/userEmail', async (req: Request, res: Response) => {
 });
 
 app.post('/send-email', async (req: Request, res: Response) => {
-  const { to, subject } = req.body;
-  const text = 'This is a test email from your Weather Calendar app!';
-  // Configure your email transport (example uses Gmail)
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.EMAIL_USER,      // Your Gmail address
-      pass: process.env.EMAIL_PASSWORD,  // Your Gmail app password
-    },
-  });
+  const { email } = req.body;
+  const access_token = req.cookies.access_token;
+  console.log('Access token from cookie (send-email):', access_token);
+  console.log('Email from request body:', email);
+  if (!access_token) {
+    res.status(401).json({ error: 'Not authenticated' });
+    return;
+  }
+  if (!email) {
+    res.status(400).json({ error: 'Email is required' }); // Ensure email provided
+    return;
+  }
   try {
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to,
-      subject,
-      text
-    });
+    sendEmail(email, access_token);
+    console.log(`✅ Email sent to ${email}`);
     res.json({ success: true });
-  } catch (error) {
+  }
+  catch (error) {
     console.error('Email send failed:', error);
     res.status(500).json({ error: 'Failed to send email' });
   }
 });
+
+app.post('/logout', (_req: Request, res: Response) => {
+  console.log('Logging out user');
+  res.clearCookie('access_token', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+  });
+  res.status(200).json({ success: true });
+});
+
 
 cron.schedule('0 6 * * *', async () => {
   console.log(`📧 Running scheduled task at ${new Date().toLocaleTimeString()}`);
@@ -426,7 +496,7 @@ cron.schedule('0 6 * * *', async () => {
         ${data.items.length} events found in your calendar.
 
         ${data.items.map(event =>
-          
+
           `Event: ${event.summary || 'No Title'}
           Date: ${event.start?.dateTime
             ? new Date(event.start.dateTime).toLocaleString()
@@ -450,7 +520,7 @@ cron.schedule('0 6 * * *', async () => {
 });
 
 
-app.get('/', (res: Response) => {
+app.get('/', (_req: Request, res: Response) => {
   res.send('Weather Calendar backend is running!');
 });
 

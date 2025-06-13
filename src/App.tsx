@@ -53,7 +53,13 @@ function App() {
     })
       .then(res => res.json())
       .then(data => {
-        if (data) setAuthenticated(true);
+        if (data) {
+          setEvents([]);
+          setAuthenticated(true);
+
+          fetchUserEmail(); // Force fetch updated user email immediately
+          // fetchCalendarEvents(); // Fetch calendar events after successful login
+        }
         else alert('Failed to get access token');
       })
       .catch(() => alert('Token exchange failed'));
@@ -68,6 +74,8 @@ function App() {
 
   useEffect(() => {
     if (authenticated) {
+      setEvents([]);
+      setUserEmail(null);
       fetchCalendarEvents();
       fetchUserEmail();
     }
@@ -121,21 +129,37 @@ function App() {
       .catch(() => alert('Failed to save preferences'));
   };
 
-  // const sendEmail = () => {
-  //   fetch(`${API_BASE_URL}/send-email`, {
-  //     method: 'POST',
-  //     headers: { 'Content-Type': 'application/json' },
-  //     body: JSON.stringify({ to: userEmail, subject: 'Weather Alert' }),
-  //   })
-  //     .then(res => res.json())
-  //     .then(data => alert(data.success ? 'Email sent!' : 'Failed to send email'));
-  // };
+  const sendEmail = () => {
+    console.log('Here')
+    fetch(`${API_BASE_URL}/send-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: userEmail }),
+      credentials: 'include',
+    })
+      .then(res => res.json())
+      .then(data => alert(data.success ? 'Email sent!' : 'Failed to send email'));
+    console.log('Email sent');
+  };
 
-  const logout = () => {
-    localStorage.clear();
-    setEvents([]);
-    setAuthCode(null);
-    setAuthenticated(false);
+  const logout = async () => {
+    await fetch(`${API_BASE_URL}/logout`, {
+      method: 'POST',
+      credentials: 'include',
+    })
+    .then(res => res.json())
+    .then(data => console.log(data.success ? 'Logged out successfully' : 'Failed to log out'));
+  }
+  const logoutButton = async () => {
+    // await localStorage.clear();
+    logout();
+    await setEvents([]);
+    await setAuthCode(null);
+    await setAuthenticated(false);
+    await setUserEmail(null);
+    await setWeatherAlerts(false);
+    await setShowSettings(false);
+    // window.location.href = '/';
   };
 
   if (!authenticated) {
@@ -171,10 +195,13 @@ function App() {
               </div>
             )}
           </div>
-          <button onClick={logout} className="logout-button">Logout</button>
+          <button onClick={logoutButton} className="logout-button">Logout</button>
         </div>
         <h1>Your Google Calendar Events</h1>
         <p>Logged in as: <strong>{userEmail}</strong></p>
+        <button className="send-email-button" onClick={sendEmail}>
+          Send Weather Alert Email
+        </button>
       </header>
 
       <main className="events-container">
