@@ -517,7 +517,7 @@ app.post('/logout', (_req: Request, res: Response) => {
   res.status(200).json({ success: true });
 });
 
-app.post('/cronjob',(_req: Request, res: Response) => {
+app.get('/cronjob',(_req: Request, res: Response) => {
   cronJob();
   res.status(200).json({ success: true, message: 'Cron job executed' });
 })
