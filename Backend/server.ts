@@ -217,6 +217,86 @@ const sendEmail = async (email: string, access_token: string) => {
   }
 }
 
+const cronJob = async() => {
+  console.log(`📧 Running scheduled task at ${new Date().toLocaleTimeString()}`);
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASSWORD,
+    },
+  });
+
+  const users = await db.collection('users').find({}).toArray();
+  for (const user of users) {
+    const { email } = user;
+    const { weatherAlerts } = user.preferences || {};
+    let access_token = user.access_token;
+
+    if (!email || !access_token) {
+      console.log(`❌ Skipping user with missing email or access token: ${user._id}`);
+      continue;
+    }
+
+    if (!weatherAlerts || weatherAlerts === false) {
+      console.log(`❌ Skipping user ${user._id} with preference: weatherAlerts is false`);
+      continue;
+    }
+    if (await tokenExpired(user.refresh_expires_in)) {
+      console.log(`❌ Skipping user ${user._id} with expired refresh token`);
+      continue;
+    }
+    if (await tokenExpired(user.expires_in)) {
+      console.log(`user ${user._id} with expired access token`);
+      access_token = await access_token_refresh(email);
+    }
+
+    const now = new Date().toISOString();
+    const nextMonth = new Date();
+    nextMonth.setMonth(nextMonth.getMonth() + 1);
+    const nextMonthISO = nextMonth.toISOString();
+    try {
+      const response = await axios.get(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&orderBy=startTime&timeMin=${now}&timeMax=${nextMonthISO}`,
+        {
+          headers: {
+            Authorization: `Bearer ${access_token}`,
+          },
+        }
+      );
+      let data = response.data as { items: CalendarEvent[] };
+      data.items = await fetchWeatherForEvents(data.items)
+
+      await transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: email,
+        subject: 'Weather Calendar - Test Email',
+        text: `This is your weather alert email sent every minute (for testing).
+        ${data.items.length} events found in your calendar.
+
+        ${data.items.map(event =>
+
+          `Event: ${event.summary || 'No Title'}
+          Date: ${event.start?.dateTime
+            ? new Date(event.start.dateTime).toLocaleString()
+            : event.start?.date
+              ? new Date(event.start.date).toLocaleDateString()
+              : 'No Date'
+          }
+          Location: ${event.location || 'No Location'}
+          Weather: ${event.weather?.description || 'No Weather Data'}
+          Temperature: ${event.weather?.temperature || 'No Temperature Data'}
+          Probability of Precipitation: ${event.weather?.pop || 'No Data'}
+          Time Left: ${event.weather?.timeLeft ? `${event.weather.timeLeft.days} days, ${event.weather.timeLeft.hours} hours, ${event.weather.timeLeft.minutes} minutes, ${event.weather.timeLeft.seconds} seconds` : 'No Time Left Data'}`
+        ).join('\n\n')}`
+      });
+
+      console.log(`✅ Email sent to ${email}`);
+    } catch (error) {
+      console.error(`❌ Failed to send email to ${email}:`, error);
+    }
+}} 
+
 
 app.get('/api/getPreferences', async (req: Request, res: Response) => {
   const email = req.query.email as string;
@@ -437,7 +517,12 @@ app.post('/logout', (_req: Request, res: Response) => {
   res.status(200).json({ success: true });
 });
 
+app.post('/cronjob',(_req: Request, res: Response) => {
+  cronJob();
+  res.status(200).json({ success: true, message: 'Cron job executed' });
+})
 
+// This cron job runs every day at 6 AM
 cron.schedule('0 6 * * *', async () => {
   console.log(`📧 Running scheduled task at ${new Date().toLocaleTimeString()}`);
   const transporter = nodemailer.createTransport({
