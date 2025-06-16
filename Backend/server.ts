@@ -119,7 +119,7 @@ const access_token_refresh = async (email: string) => {
     },
     { upsert: true }
   );
-
+  return access_token;
   console.log('Response from token refresh:', response.data);
 }
 
